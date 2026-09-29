@@ -1,5 +1,5 @@
-pack "point_types.pk"
-import "point_helpers.pk"
+pack "point_types.hy"
+import "point_helpers.hy"
 
 Str main() {
     change dimensions!N = point_dimension()

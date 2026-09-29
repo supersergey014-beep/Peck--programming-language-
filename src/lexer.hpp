@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 
-namespace peck {
+namespace hypha {
 
 enum class TokenKind {
     Identifier,

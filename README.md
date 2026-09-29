@@ -1,6 +1,6 @@
-# Peck Compiler
+# Hypha Compiler
 
-`pk` is a small native compiler for the Peck `.pk` language. It uses LLVM to emit
+`hy` is a small native compiler for the Hypha `.hy` language. It uses LLVM to emit
 native object files and `clang++` to link executables.
 
 ## Requirements
@@ -23,21 +23,21 @@ containing `LLVMConfig.cmake`.
 ## Compile
 
 ```sh
-build/pk examples/hello.pk -o hello
+build/hy examples/hello.hy -o hello
 ./hello
 ```
 
 Use `-c` (or `--emit-obj`) to emit a native object file instead of linking:
 
 ```sh
-build/pk examples/hello.pk -c -o hello.o
+build/hy examples/hello.hy -c -o hello.o
 ```
 
 Functions use `Str` or `func`; an optional suffix after the parameter list sets
 the return type. Parameters take a mutability keyword and type suffix, and
 `ret` returns a value:
 
-```pk
+```hy
 Str add(var left!N, var right!N) !N {
 	ret left + right
 	End
@@ -55,8 +55,8 @@ Parameters declared with `var` or `mut` are immutable; `change`/`chn` and
 suffix. Function bodies use `End`, with `Output.string("text")` and `//` line
 comments supported.
 
-Top-level structs and relative source imports are supported. `pack "file.pk"`
-and `import "file.pk"` are equivalent. Pointer expressions include `&value`,
+Top-level structs and relative source imports are supported. `pack "file.hy"`
+and `import "file.hy"` are equivalent. Pointer expressions include `&value`,
 `*pointer`, `^pointer`, and `@value`; `select(StructName)` allocates struct
 storage with `malloc`, and `free(pointer)` releases it.
 

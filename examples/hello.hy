@@ -5,7 +5,7 @@ Str main() {
     bt flags!B = 1
     data buffer!D = "raw bytes"
     char symbol!C = 'A'
-    line name!L = "Peck"
+    line name!L = "Hypha"
     var message!str = "typed string"
 
     change score!N = 7

@@ -8,9 +8,9 @@
 #include <variant>
 #include <vector>
 
-namespace peck {
+namespace hypha {
 
-enum class PeckType {
+enum class HyphaType {
     Inferred,
     Integer,
     Float,
@@ -71,7 +71,7 @@ using InitializerASTNode = std::variant<ExpressionASTNode, ArrayLiteralASTNode>;
 struct VarDeclASTNode {
     std::string name;
     MutabilityMode mutability = MutabilityMode::Mutable;
-    std::optional<PeckType> explicit_type;
+    std::optional<HyphaType> explicit_type;
     std::string type_suffix;
     std::optional<std::uint64_t> freeze_ticks;
     InitializerASTNode initializer;
@@ -108,7 +108,7 @@ struct CallStatementASTNode {
 
 struct StructFieldASTNode {
     std::string name;
-    PeckType type;
+    HyphaType type;
     MutabilityMode mutability;
 };
 
@@ -166,14 +166,14 @@ struct LoopASTNode {
 
 struct ParameterASTNode {
     std::string name;
-    PeckType type;
+    HyphaType type;
     MutabilityMode mutability;
 };
 
 struct FunctionASTNode {
     std::string name;
     std::vector<ParameterASTNode> parameters;
-    std::optional<PeckType> return_type;
+    std::optional<HyphaType> return_type;
     std::vector<StatementASTNode> body;
 };
 

@@ -5,7 +5,7 @@
 #include <string_view>
 #include <utility>
 
-namespace peck {
+namespace hypha {
 namespace {
 
 bool is_keyword(const std::string& word) {

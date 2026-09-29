@@ -1,4 +1,4 @@
-#include "peck/compiler.hpp"
+#include "hypha/compiler.hpp"
 
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -19,7 +19,7 @@ struct Options {
 };
 
 void print_usage(std::ostream& stream) {
-    stream << "Usage: pk <source.pk> [-o <output>] [-c|--emit-obj]\n";
+    stream << "Usage: hy <source.hy> [-o <output>] [-c|--emit-obj]\n";
 }
 
 Options parse_options(int argc, char** argv) {
@@ -44,8 +44,8 @@ Options parse_options(int argc, char** argv) {
         }
     }
     if (options.input.empty()) throw std::runtime_error("no input source file provided");
-    if (!options.input.has_extension() || options.input.extension() != ".pk") {
-        throw std::runtime_error("input file must have a .pk extension");
+    if (!options.input.has_extension() || options.input.extension() != ".hy") {
+        throw std::runtime_error("input file must have a .hy extension");
     }
     if (options.output.empty()) {
         options.output = options.input;
@@ -73,14 +73,14 @@ void link_executable(const std::filesystem::path& object, const std::filesystem:
 int main(int argc, char** argv) {
     try {
         const auto options = parse_options(argc, argv);
-        const auto program = peck::parse_file(options.input);
+        const auto program = hypha::parse_file(options.input);
         if (options.emit_object) {
-            peck::emit_object(program, options.output);
+            hypha::emit_object(program, options.output);
         } else {
             const auto object = std::filesystem::temp_directory_path() /
-                ("peck-" + std::to_string(static_cast<long long>(getpid())) + ".o");
+                ("hy-" + std::to_string(static_cast<long long>(getpid())) + ".o");
             try {
-                peck::emit_object(program, object);
+                hypha::emit_object(program, object);
                 link_executable(object, options.output);
                 std::filesystem::remove(object);
             } catch (...) {
@@ -89,7 +89,7 @@ int main(int argc, char** argv) {
             }
         }
     } catch (const std::exception& error) {
-        std::cerr << "pk: " << error.what() << '\n';
+        std::cerr << "hy: " << error.what() << '\n';
         return 1;
     }
     return 0;

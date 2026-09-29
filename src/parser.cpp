@@ -1,4 +1,4 @@
-#include "peck/compiler.hpp"
+#include "hypha/compiler.hpp"
 #include "lexer.hpp"
 
 #include <charconv>
@@ -11,7 +11,7 @@
 #include <unordered_set>
 #include <utility>
 
-namespace peck {
+namespace hypha {
 namespace {
 
 class Parser {
@@ -149,13 +149,13 @@ private:
         return method;
     }
 
-    static PeckType type_from_suffix(const std::string& suffix) {
-        if (suffix == "N") return PeckType::Integer;
-        if (suffix == "F") return PeckType::Float;
-        if (suffix == "D") return PeckType::Double;
-        if (suffix == "B") return PeckType::Byte;
-        if (suffix == "C") return PeckType::Character;
-        if (suffix == "L" || suffix == "str") return PeckType::String;
+    static HyphaType type_from_suffix(const std::string& suffix) {
+        if (suffix == "N") return HyphaType::Integer;
+        if (suffix == "F") return HyphaType::Float;
+        if (suffix == "D") return HyphaType::Double;
+        if (suffix == "B") return HyphaType::Byte;
+        if (suffix == "C") return HyphaType::Character;
+        if (suffix == "L" || suffix == "str") return HyphaType::String;
         throw std::runtime_error("unsupported function type suffix '!" + suffix + "'");
     }
 
@@ -384,13 +384,13 @@ private:
             word == "line" || word == "array";
     }
 
-    static PeckType type_from_word(const std::string& word) {
-        if (word == "bt") return PeckType::Byte;
-        if (word == "data") return PeckType::Data;
-        if (word == "char") return PeckType::Character;
-        if (word == "line") return PeckType::String;
-        if (word == "array") return PeckType::Array;
-        return PeckType::Inferred;
+    static HyphaType type_from_word(const std::string& word) {
+        if (word == "bt") return HyphaType::Byte;
+        if (word == "data") return HyphaType::Data;
+        if (word == "char") return HyphaType::Character;
+        if (word == "line") return HyphaType::String;
+        if (word == "array") return HyphaType::Array;
+        return HyphaType::Inferred;
     }
 
     MutabilityMode parse_mutability() {
@@ -576,11 +576,11 @@ private:
         } else {
             declaration.initializer = parse_expression(true);
         }
-        if (declaration.explicit_type == PeckType::Array &&
+        if (declaration.explicit_type == HyphaType::Array &&
             !std::holds_alternative<ArrayLiteralASTNode>(declaration.initializer)) {
             fail("array declaration requires an array literal initializer");
         }
-        if (declaration.explicit_type == PeckType::Data && declaration.type_suffix.empty() &&
+        if (declaration.explicit_type == HyphaType::Data && declaration.type_suffix.empty() &&
             !std::holds_alternative<ArrayLiteralASTNode>(declaration.initializer) &&
             std::get<ExpressionASTNode>(declaration.initializer).kind != ExpressionASTNode::Kind::String) {
             fail("data declaration requires a string or byte-array initializer");

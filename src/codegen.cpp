@@ -1,4 +1,4 @@
-#include "peck/compiler.hpp"
+#include "hypha/compiler.hpp"
 
 #include <llvm/IR/BasicBlock.h>
 #include <llvm/IR/Constants.h>
@@ -25,15 +25,15 @@
 #include <unordered_map>
 #include <variant>
 
-namespace peck {
+namespace hypha {
 namespace {
 
 struct VariableSymbol {
     llvm::Value* address;
-    PeckType type;
+    HyphaType type;
     MutabilityMode mutability;
     llvm::Type* value_type = nullptr;
-    PeckType pointee_type = PeckType::Inferred;
+    HyphaType pointee_type = HyphaType::Inferred;
     std::string struct_name;
     MutabilityMode pointee_mutability = MutabilityMode::Mutable;
     std::string enum_name;
@@ -52,7 +52,7 @@ struct EnumInfo {
 
 struct FunctionInfo {
     llvm::Function* value;
-    std::optional<PeckType> return_type;
+    std::optional<HyphaType> return_type;
     std::vector<ParameterASTNode> parameters;
     bool is_entry_point = false;
 };
@@ -65,68 +65,68 @@ struct FunctionTable : std::unordered_map<std::string, FunctionInfo> {
 
 struct LValueInfo {
     llvm::Value* address;
-    PeckType type;
+    HyphaType type;
     MutabilityMode mutability;
     llvm::Type* llvm_type;
     std::string struct_name;
 };
 
-PeckType suffix_type(const std::string& suffix) {
-    if (suffix == "N") return PeckType::Integer;
-    if (suffix == "F") return PeckType::Float;
-    if (suffix == "D") return PeckType::Double;
-    if (suffix == "B") return PeckType::Byte;
-    if (suffix == "C") return PeckType::Character;
-    if (suffix == "L" || suffix == "str") return PeckType::String;
+HyphaType suffix_type(const std::string& suffix) {
+    if (suffix == "N") return HyphaType::Integer;
+    if (suffix == "F") return HyphaType::Float;
+    if (suffix == "D") return HyphaType::Double;
+    if (suffix == "B") return HyphaType::Byte;
+    if (suffix == "C") return HyphaType::Character;
+    if (suffix == "L" || suffix == "str") return HyphaType::String;
     throw std::runtime_error("unsupported type suffix '!" + suffix + "'");
 }
 
-PeckType infer_type(const ExpressionASTNode& expression) {
-    if (expression.kind == ExpressionASTNode::Kind::String) return PeckType::String;
-    if (expression.kind == ExpressionASTNode::Kind::Character) return PeckType::Character;
+HyphaType infer_type(const ExpressionASTNode& expression) {
+    if (expression.kind == ExpressionASTNode::Kind::String) return HyphaType::String;
+    if (expression.kind == ExpressionASTNode::Kind::Character) return HyphaType::Character;
     if (expression.kind == ExpressionASTNode::Kind::AddressOf ||
         expression.kind == ExpressionASTNode::Kind::PointerAt ||
-        expression.kind == ExpressionASTNode::Kind::Select) return PeckType::Pointer;
+        expression.kind == ExpressionASTNode::Kind::Select) return HyphaType::Pointer;
     if (expression.kind == ExpressionASTNode::Kind::ReadInput ||
-        expression.kind == ExpressionASTNode::Kind::ReadLine) return PeckType::String;
-    if (expression.kind == ExpressionASTNode::Kind::MemberAccess) return PeckType::Enum;
+        expression.kind == ExpressionASTNode::Kind::ReadLine) return HyphaType::String;
+    if (expression.kind == ExpressionASTNode::Kind::MemberAccess) return HyphaType::Enum;
     if (expression.kind == ExpressionASTNode::Kind::Identifier) {
         throw std::runtime_error("cannot infer a declaration type from an identifier initializer");
     }
     if (expression.kind == ExpressionASTNode::Kind::Add && expression.left && expression.right) {
         const auto left_type = infer_type(*expression.left);
         const auto right_type = infer_type(*expression.right);
-        if (left_type == PeckType::Double || right_type == PeckType::Double) return PeckType::Double;
-        if (left_type == PeckType::Float || right_type == PeckType::Float) return PeckType::Float;
-        return PeckType::Integer;
+        if (left_type == HyphaType::Double || right_type == HyphaType::Double) return HyphaType::Double;
+        if (left_type == HyphaType::Float || right_type == HyphaType::Float) return HyphaType::Float;
+        return HyphaType::Integer;
     }
-    return expression.value.find('.') == std::string::npos ? PeckType::Integer : PeckType::Double;
+    return expression.value.find('.') == std::string::npos ? HyphaType::Integer : HyphaType::Double;
 }
 
-PeckType resolve_type(const VarDeclASTNode& declaration) {
+HyphaType resolve_type(const VarDeclASTNode& declaration) {
     const bool is_array = std::holds_alternative<ArrayLiteralASTNode>(declaration.initializer);
-    if (declaration.explicit_type == PeckType::Data &&
+    if (declaration.explicit_type == HyphaType::Data &&
         (declaration.type_suffix.empty() || declaration.type_suffix == "D")) {
-        return PeckType::Data;
+        return HyphaType::Data;
     }
-    if (is_array) return PeckType::Array;
+    if (is_array) return HyphaType::Array;
     if (!declaration.type_suffix.empty()) return suffix_type(declaration.type_suffix);
-    if (declaration.explicit_type && *declaration.explicit_type != PeckType::Inferred) {
+    if (declaration.explicit_type && *declaration.explicit_type != HyphaType::Inferred) {
         return *declaration.explicit_type;
     }
     return infer_type(std::get<ExpressionASTNode>(declaration.initializer));
 }
 
-llvm::Type* llvm_scalar_type(PeckType type, llvm::LLVMContext& context) {
+llvm::Type* llvm_scalar_type(HyphaType type, llvm::LLVMContext& context) {
     switch (type) {
-    case PeckType::Integer: return llvm::Type::getInt32Ty(context);
-    case PeckType::Float: return llvm::Type::getFloatTy(context);
-    case PeckType::Double: return llvm::Type::getDoubleTy(context);
-    case PeckType::Byte:
-    case PeckType::Character: return llvm::Type::getInt8Ty(context);
-    case PeckType::String: return llvm::PointerType::getUnqual(context);
-    case PeckType::Pointer: return llvm::PointerType::getUnqual(context);
-    case PeckType::Enum: return llvm::Type::getInt32Ty(context);
+    case HyphaType::Integer: return llvm::Type::getInt32Ty(context);
+    case HyphaType::Float: return llvm::Type::getFloatTy(context);
+    case HyphaType::Double: return llvm::Type::getDoubleTy(context);
+    case HyphaType::Byte:
+    case HyphaType::Character: return llvm::Type::getInt8Ty(context);
+    case HyphaType::String: return llvm::PointerType::getUnqual(context);
+    case HyphaType::Pointer: return llvm::PointerType::getUnqual(context);
+    case HyphaType::Enum: return llvm::Type::getInt32Ty(context);
     default: throw std::runtime_error("type is not a scalar LLVM type");
     }
 }
@@ -141,10 +141,10 @@ std::int64_t parse_integer(const std::string& text) {
 llvm::Value* scalar_value(
     llvm::IRBuilder<>& builder,
     const ExpressionASTNode& expression,
-    PeckType type) {
+    HyphaType type) {
     auto& context = builder.getContext();
     switch (type) {
-    case PeckType::Integer: {
+    case HyphaType::Integer: {
         if (expression.kind != ExpressionASTNode::Kind::Number || expression.value.find('.') != std::string::npos) {
             throw std::runtime_error("integer variable requires an integer literal");
         }
@@ -154,12 +154,12 @@ llvm::Value* scalar_value(
         }
         return llvm::ConstantInt::get(llvm::Type::getInt32Ty(context), value, true);
     }
-    case PeckType::Byte:
-    case PeckType::Character: {
+    case HyphaType::Byte:
+    case HyphaType::Character: {
         std::int64_t value = 0;
         if (expression.kind == ExpressionASTNode::Kind::Character && expression.value.size() == 1) {
             value = static_cast<unsigned char>(expression.value[0]);
-        } else if (type == PeckType::Byte && expression.kind == ExpressionASTNode::Kind::Number &&
+        } else if (type == HyphaType::Byte && expression.kind == ExpressionASTNode::Kind::Number &&
                    expression.value.find('.') == std::string::npos) {
             value = parse_integer(expression.value);
         } else {
@@ -170,15 +170,15 @@ llvm::Value* scalar_value(
         }
         return llvm::ConstantInt::get(llvm::Type::getInt8Ty(context), value);
     }
-    case PeckType::Float:
-    case PeckType::Double: {
+    case HyphaType::Float:
+    case HyphaType::Double: {
         if (expression.kind != ExpressionASTNode::Kind::Number) {
             throw std::runtime_error("floating-point variable requires a numeric literal");
         }
         const auto value = std::stod(expression.value);
         return llvm::ConstantFP::get(llvm_scalar_type(type, context), value);
     }
-    case PeckType::String:
+    case HyphaType::String:
         if (expression.kind != ExpressionASTNode::Kind::String) {
             throw std::runtime_error("string variable requires a string literal");
         }
@@ -193,7 +193,7 @@ llvm::Value* expression_value(
     const ExpressionASTNode& expression,
     const SymbolTable& symbols,
     const FunctionTable& functions,
-    PeckType expected_type);
+    HyphaType expected_type);
 
 llvm::Value* emit_input_line(llvm::IRBuilder<>& builder) {
     auto* module = builder.GetInsertBlock()->getModule();
@@ -261,11 +261,11 @@ LValueInfo emit_lvalue(
         }
         const auto found = symbols.find(operand.value);
         if (found == symbols.end()) throw std::runtime_error("use of undeclared pointer '" + operand.value + "'");
-        if (found->second.type != PeckType::Pointer || found->second.pointee_type == PeckType::Inferred) {
+        if (found->second.type != HyphaType::Pointer || found->second.pointee_type == HyphaType::Inferred) {
             throw std::runtime_error("cannot dereference an untyped pointer '" + operand.value + "'");
         }
-        auto* pointer = expression_value(builder, operand, symbols, functions, PeckType::Pointer);
-        auto* pointee_type = found->second.pointee_type == PeckType::Struct
+        auto* pointer = expression_value(builder, operand, symbols, functions, HyphaType::Pointer);
+        auto* pointee_type = found->second.pointee_type == HyphaType::Struct
             ? static_cast<llvm::Type*>(functions.structs.at(found->second.struct_name).type)
             : llvm_scalar_type(found->second.pointee_type, builder.getContext());
         return {pointer, found->second.pointee_type, found->second.pointee_mutability,
@@ -286,7 +286,7 @@ LValueInfo emit_lvalue(
         for (std::size_t index = 0; index < struct_info->second.fields.size(); ++index) {
             const auto& field = struct_info->second.fields[index];
             if (field.name != expression.member->member) continue;
-            auto* object_pointer = expression_value(builder, object, symbols, functions, PeckType::Pointer);
+            auto* object_pointer = expression_value(builder, object, symbols, functions, HyphaType::Pointer);
             auto* field_address = builder.CreateStructGEP(
                 struct_info->second.type, object_pointer, static_cast<unsigned>(index), field.name + ".addr");
             return {field_address, field.type, field.mutability,
@@ -303,14 +303,14 @@ llvm::Value* expression_value(
     const ExpressionASTNode& expression,
     const SymbolTable& symbols,
     const FunctionTable& functions,
-    PeckType expected_type) {
+    HyphaType expected_type) {
     if (expression.kind == ExpressionASTNode::Kind::Add && expression.left && expression.right) {
         auto* left = expression_value(builder, *expression.left, symbols, functions, expected_type);
         auto* right = expression_value(builder, *expression.right, symbols, functions, expected_type);
-        if (expected_type == PeckType::Float || expected_type == PeckType::Double) {
+        if (expected_type == HyphaType::Float || expected_type == HyphaType::Double) {
             return builder.CreateFAdd(left, right, "add.value");
         }
-        if (expected_type == PeckType::Integer || expected_type == PeckType::Byte) {
+        if (expected_type == HyphaType::Integer || expected_type == HyphaType::Byte) {
             return builder.CreateAdd(left, right, "add.value");
         }
         throw std::runtime_error("addition requires numeric operands");
@@ -345,7 +345,7 @@ llvm::Value* expression_value(
     }
     if (expression.kind == ExpressionASTNode::Kind::ReadInput ||
         expression.kind == ExpressionASTNode::Kind::ReadLine) {
-        if (expected_type != PeckType::String) throw std::runtime_error("input() returns a string");
+        if (expected_type != HyphaType::String) throw std::runtime_error("input() returns a string");
         return emit_input_line(builder);
     }
     if (expression.kind == ExpressionASTNode::Kind::Select) {
@@ -387,21 +387,21 @@ llvm::Value* expression_value(
     if (found->second.type != expected_type) {
         throw std::runtime_error("assignment type does not match variable '" + expression.value + "'");
     }
-    if (expected_type == PeckType::Array || expected_type == PeckType::Data) {
+    if (expected_type == HyphaType::Array || expected_type == HyphaType::Data) {
         throw std::runtime_error("array/data values cannot be used as scalar expressions");
     }
-    auto* type = expected_type == PeckType::Pointer && found->second.value_type
+    auto* type = expected_type == HyphaType::Pointer && found->second.value_type
         ? found->second.value_type : llvm_scalar_type(expected_type, builder.getContext());
     return builder.CreateLoad(type, found->second.address, expression.value + ".value");
 }
 
-PeckType array_element_type(const VarDeclASTNode& declaration, const ArrayLiteralASTNode& array) {
+HyphaType array_element_type(const VarDeclASTNode& declaration, const ArrayLiteralASTNode& array) {
     if (!declaration.type_suffix.empty()) return suffix_type(declaration.type_suffix);
-    if (declaration.explicit_type && *declaration.explicit_type != PeckType::Array &&
-        *declaration.explicit_type != PeckType::Inferred && *declaration.explicit_type != PeckType::Data) {
+    if (declaration.explicit_type && *declaration.explicit_type != HyphaType::Array &&
+        *declaration.explicit_type != HyphaType::Inferred && *declaration.explicit_type != HyphaType::Data) {
         return *declaration.explicit_type;
     }
-    return array.elements.empty() ? PeckType::Integer : infer_type(array.elements.front());
+    return array.elements.empty() ? HyphaType::Integer : infer_type(array.elements.front());
 }
 
 void initialize_array(
@@ -409,14 +409,14 @@ void initialize_array(
     llvm::Value* address,
     llvm::ArrayType* array_type,
     const ArrayLiteralASTNode& array,
-    PeckType element_type) {
+    HyphaType element_type) {
     auto* zero = builder.getInt32(0);
     for (std::size_t index = 0; index < array.elements.size(); ++index) {
         const auto inferred = infer_type(array.elements[index]);
         const bool numeric_conversion = array.elements[index].kind == ExpressionASTNode::Kind::Number &&
-            (element_type == PeckType::Float || element_type == PeckType::Double);
+            (element_type == HyphaType::Float || element_type == HyphaType::Double);
         if (inferred != element_type &&
-            !(element_type == PeckType::Byte && inferred == PeckType::Integer) && !numeric_conversion) {
+            !(element_type == HyphaType::Byte && inferred == HyphaType::Integer) && !numeric_conversion) {
             throw std::runtime_error("array elements must have a consistent element type");
         }
         auto* element_address = builder.CreateInBoundsGEP(
@@ -438,7 +438,7 @@ void emit_declaration(
     llvm::Type* storage_type = nullptr;
     llvm::Value* initial_value = nullptr;
 
-    if (resolved_type == PeckType::Data) {
+    if (resolved_type == HyphaType::Data) {
         std::size_t byte_count = 0;
         if (const auto* text = std::get_if<ExpressionASTNode>(&declaration.initializer)) {
             if (text->kind != ExpressionASTNode::Kind::String) {
@@ -461,24 +461,24 @@ void emit_declaration(
             }
         } else {
             const auto& array = std::get<ArrayLiteralASTNode>(declaration.initializer);
-            initialize_array(builder, address, array_type, array, PeckType::Byte);
+            initialize_array(builder, address, array_type, array, HyphaType::Byte);
         }
-        symbols.emplace(declaration.name, VariableSymbol{address, PeckType::Data, declaration.mutability});
+        symbols.emplace(declaration.name, VariableSymbol{address, HyphaType::Data, declaration.mutability});
         return;
     }
 
-    if (resolved_type == PeckType::Array) {
+    if (resolved_type == HyphaType::Array) {
         const auto& array = std::get<ArrayLiteralASTNode>(declaration.initializer);
         const auto element_type = array_element_type(declaration, array);
         auto* element_llvm_type = llvm_scalar_type(element_type, context);
         auto* array_type = llvm::ArrayType::get(element_llvm_type, array.elements.size());
         auto* address = builder.CreateAlloca(array_type, nullptr, declaration.name);
         initialize_array(builder, address, array_type, array, element_type);
-        symbols.emplace(declaration.name, VariableSymbol{address, PeckType::Array, declaration.mutability});
+        symbols.emplace(declaration.name, VariableSymbol{address, HyphaType::Array, declaration.mutability});
         return;
     }
 
-    if (resolved_type == PeckType::Enum) {
+    if (resolved_type == HyphaType::Enum) {
         const auto& initializer = std::get<ExpressionASTNode>(declaration.initializer);
         if (initializer.kind != ExpressionASTNode::Kind::MemberAccess || !initializer.member ||
             initializer.member->object->kind != ExpressionASTNode::Kind::Identifier) {
@@ -498,18 +498,18 @@ void emit_declaration(
             value_type, std::distance(enum_info->second.variants.begin(), tag));
         builder.CreateStore(value, address);
         symbols.emplace(declaration.name, VariableSymbol{
-            address, PeckType::Enum, declaration.mutability, value_type,
-            PeckType::Inferred, {}, MutabilityMode::Mutable, enum_name});
+            address, HyphaType::Enum, declaration.mutability, value_type,
+            HyphaType::Inferred, {}, MutabilityMode::Mutable, enum_name});
         return;
     }
 
-    if (resolved_type == PeckType::Pointer) {
+    if (resolved_type == HyphaType::Pointer) {
         const auto& initializer = std::get<ExpressionASTNode>(declaration.initializer);
-        PeckType pointee_type = PeckType::Inferred;
+        HyphaType pointee_type = HyphaType::Inferred;
         std::string struct_name;
         auto pointee_mutability = MutabilityMode::Mutable;
         if (initializer.kind == ExpressionASTNode::Kind::Select) {
-            pointee_type = PeckType::Struct;
+            pointee_type = HyphaType::Struct;
             struct_name = initializer.value;
         } else if ((initializer.kind == ExpressionASTNode::Kind::AddressOf ||
                 initializer.kind == ExpressionASTNode::Kind::PointerAt) && initializer.pointer) {
@@ -519,17 +519,17 @@ void emit_declaration(
             pointee_mutability = target.mutability;
         } else if (initializer.kind == ExpressionASTNode::Kind::Identifier) {
             const auto found = symbols.find(initializer.value);
-            if (found != symbols.end() && found->second.type == PeckType::Pointer) {
+            if (found != symbols.end() && found->second.type == HyphaType::Pointer) {
                 pointee_type = found->second.pointee_type;
                 struct_name = found->second.struct_name;
             }
         }
         auto* pointer_type = llvm::PointerType::getUnqual(context);
-        auto* value = expression_value(builder, initializer, symbols, functions, PeckType::Pointer);
+        auto* value = expression_value(builder, initializer, symbols, functions, HyphaType::Pointer);
         auto* address = builder.CreateAlloca(pointer_type, nullptr, declaration.name);
         builder.CreateStore(value, address);
         symbols.emplace(declaration.name, VariableSymbol{
-            address, PeckType::Pointer, declaration.mutability, pointer_type,
+            address, HyphaType::Pointer, declaration.mutability, pointer_type,
             pointee_type, struct_name, pointee_mutability});
         return;
     }
@@ -548,19 +548,19 @@ llvm::Value* condition_value(
     const ExpressionASTNode& expression,
     const SymbolTable& symbols,
     const FunctionTable& functions,
-    std::optional<PeckType> expected_type) {
+    std::optional<HyphaType> expected_type) {
     if (expression.kind == ExpressionASTNode::Kind::Identifier) {
         const auto found = symbols.find(expression.value);
         if (found == symbols.end()) throw std::runtime_error("use of undeclared variable '" + expression.value + "'");
-        if (found->second.type == PeckType::Array || found->second.type == PeckType::Data ||
-            found->second.type == PeckType::String) {
+        if (found->second.type == HyphaType::Array || found->second.type == HyphaType::Data ||
+            found->second.type == HyphaType::String) {
             throw std::runtime_error("if conditions require scalar numeric operands");
         }
         auto* type = llvm_scalar_type(found->second.type, builder.getContext());
         return builder.CreateLoad(type, found->second.address, expression.value + ".condition");
     }
     const auto type = expected_type.value_or(infer_type(expression));
-    if (type == PeckType::String || type == PeckType::Data || type == PeckType::Array) {
+    if (type == HyphaType::String || type == HyphaType::Data || type == HyphaType::Array) {
         throw std::runtime_error("if conditions require scalar numeric operands");
     }
     return expression_value(builder, expression, symbols, functions, type);
@@ -571,7 +571,7 @@ llvm::Value* emit_condition(
     const ConditionASTNode& condition,
     const SymbolTable& symbols,
     const FunctionTable& functions) {
-    std::optional<PeckType> common_type;
+    std::optional<HyphaType> common_type;
     if (condition.left.kind == ExpressionASTNode::Kind::Identifier) {
         const auto found = symbols.find(condition.left.value);
         if (found == symbols.end()) throw std::runtime_error("use of undeclared variable '" + condition.left.value + "'");
@@ -584,10 +584,10 @@ llvm::Value* emit_condition(
         const auto left_type = infer_type(condition.left);
         const auto right_type = infer_type(condition.right);
         if (left_type != right_type) {
-            if ((left_type == PeckType::Integer || left_type == PeckType::Float || left_type == PeckType::Double) &&
-                (right_type == PeckType::Integer || right_type == PeckType::Float || right_type == PeckType::Double)) {
-                common_type = (left_type == PeckType::Double || right_type == PeckType::Double)
-                    ? PeckType::Double : PeckType::Float;
+            if ((left_type == HyphaType::Integer || left_type == HyphaType::Float || left_type == HyphaType::Double) &&
+                (right_type == HyphaType::Integer || right_type == HyphaType::Float || right_type == HyphaType::Double)) {
+                common_type = (left_type == HyphaType::Double || right_type == HyphaType::Double)
+                    ? HyphaType::Double : HyphaType::Float;
             } else {
                 throw std::runtime_error("comparison operands must have compatible types");
             }
@@ -603,7 +603,7 @@ llvm::Value* emit_condition(
         throw std::runtime_error("comparison operands must have the same type");
     }
 
-    if (type == PeckType::Float || type == PeckType::Double) {
+    if (type == HyphaType::Float || type == HyphaType::Double) {
         llvm::CmpInst::Predicate predicate;
         switch (condition.operation) {
         case ComparisonOperator::Equal: predicate = llvm::CmpInst::FCMP_OEQ; break;
@@ -670,7 +670,7 @@ void emit_respon(
     const FunctionInfo& current_function) {
     const auto variable = symbols.find(statement.variable);
     if (variable == symbols.end()) throw std::runtime_error("respon references undeclared variable '" + statement.variable + "'");
-    if (variable->second.type != PeckType::Enum || variable->second.enum_name.empty()) {
+    if (variable->second.type != HyphaType::Enum || variable->second.enum_name.empty()) {
         throw std::runtime_error("respon requires an enum variable");
     }
     const auto enum_info = functions.enums.find(variable->second.enum_name);
@@ -703,8 +703,8 @@ void emit_respon(
     builder.SetInsertPoint(merge_block);
 }
 
-llvm::Type* loop_counter_type(PeckType type, llvm::LLVMContext& context) {
-    if (type == PeckType::Integer || type == PeckType::Byte || type == PeckType::Character) {
+llvm::Type* loop_counter_type(HyphaType type, llvm::LLVMContext& context) {
+    if (type == HyphaType::Integer || type == HyphaType::Byte || type == HyphaType::Character) {
         return llvm_scalar_type(type, context);
     }
     throw std::runtime_error("for loop counter must be an integer type");
@@ -749,7 +749,7 @@ void emit_loop(
         const auto type = counter->second.type;
         auto* counter_type = loop_counter_type(type, builder.getContext());
         auto* current = builder.CreateLoad(counter_type, counter->second.address, counter_name + ".loop.value");
-        auto* increment = type == PeckType::Integer
+        auto* increment = type == HyphaType::Integer
             ? static_cast<llvm::Value*>(builder.getInt32(1))
             : static_cast<llvm::Value*>(builder.getInt8(1));
         auto* next = builder.CreateAdd(current, increment, counter_name + ".loop.next");
@@ -771,7 +771,7 @@ void emit_assignment(
     if (target.mutability == MutabilityMode::Immutable || target.mutability == MutabilityMode::Constant) {
         throw std::runtime_error("cannot assign to immutable variable");
     }
-    if (target.type == PeckType::Array || target.type == PeckType::Data || target.type == PeckType::Struct) {
+    if (target.type == HyphaType::Array || target.type == HyphaType::Data || target.type == HyphaType::Struct) {
         throw std::runtime_error("whole-array/data reassignment is not supported");
     }
     auto* value = expression_value(builder, assignment.value, symbols, functions, target.type);
@@ -844,7 +844,7 @@ void emit_statements(
             if (call->call.kind == ExpressionASTNode::Kind::Free) {
                 if (!call->call.left) throw std::runtime_error("free() requires a pointer argument");
                 auto* pointer = expression_value(
-                    builder, *call->call.left, symbols, functions, PeckType::Pointer);
+                    builder, *call->call.left, symbols, functions, HyphaType::Pointer);
                 auto* free_function = function->getParent()->getFunction("free");
                 builder.CreateCall(free_function, {pointer});
                 continue;
@@ -885,7 +885,7 @@ void emit_statements(
 llvm::Type* function_return_type(const FunctionASTNode& declaration, llvm::LLVMContext& context) {
     if (declaration.name == "main" && !declaration.return_type) return llvm::Type::getInt32Ty(context);
     if (!declaration.return_type) return llvm::Type::getVoidTy(context);
-    if (declaration.name == "main" && *declaration.return_type != PeckType::Integer) {
+    if (declaration.name == "main" && *declaration.return_type != HyphaType::Integer) {
         throw std::runtime_error("main return type must be !N");
     }
     return llvm_scalar_type(*declaration.return_type, context);
@@ -950,7 +950,7 @@ void emit_object(const Program& program, const std::filesystem::path& path) {
     if (!machine) throw std::runtime_error("could not create native LLVM target machine");
 
     llvm::LLVMContext context;
-    llvm::Module module("peck.module", context);
+    llvm::Module module("hypha.module", context);
     module.setTargetTriple(triple);
     module.setDataLayout(machine->createDataLayout());
 
